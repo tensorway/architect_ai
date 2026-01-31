@@ -58,7 +58,7 @@ export default function App() {
   }));
   const [selection, setSelection] = useState<Selection>({ type: "wall", id: "w1" });
   const [view, setView] = useState<ViewState>({ x: 0, y: 0, scale: 1 });
-  const [ioStatus, setIoStatus] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
   const [ioJson, setIoJson] = useState("");
   const [showExport, setShowExport] = useState(false);
   const [selectedSymbol, setSelectedSymbol] = useState<SymbolKey>("TV");
@@ -108,17 +108,17 @@ export default function App() {
   }
 
   async function handleGenerate() {
-    setIoStatus("Generating…");
+    setIsGenerating(true);
     flashButton("generate-btn");
     try {
       const next = await generatePlanFromText(prompt);
       setPlan(next);
       const firstWall = next.walls?.[0];
       setSelection(firstWall ? { type: "wall", id: firstWall.id } : null);
-      setIoStatus("Plan updated");
     } catch (err) {
       console.error("[architect] generate failed", err);
-      setIoStatus("Generation failed");
+    } finally {
+      setIsGenerating(false);
     }
   }
 
@@ -140,7 +140,6 @@ export default function App() {
         a.click();
         a.remove();
         window.setTimeout(() => URL.revokeObjectURL(url), 250);
-        setIoStatus("Saved floorplan.json");
         flashButton("save-btn");
         return;
       } catch {
@@ -150,12 +149,7 @@ export default function App() {
 
     setShowExport(true);
     if (navigator.clipboard?.writeText) {
-      navigator.clipboard
-        .writeText(json)
-        .then(() => setIoStatus("Copied JSON to clipboard"))
-        .catch(() => setIoStatus("Export ready"));
-    } else {
-      setIoStatus("Export ready");
+      navigator.clipboard.writeText(json).catch(() => {});
     }
     flashButton("save-btn");
   }
@@ -402,8 +396,14 @@ export default function App() {
       >
         <div style={{ fontSize: 12, marginBottom: 6 }}>Prompt</div>
         <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={5} />
-        <button id="generate-btn" onClick={handleGenerate} className="btn btn-primary">
-          Generate
+        <button
+          id="generate-btn"
+          onClick={handleGenerate}
+          className="btn btn-primary"
+          disabled={isGenerating}
+          style={isGenerating ? { opacity: 0.55, cursor: "not-allowed" } : undefined}
+        >
+          {isGenerating ? "Generating…" : "Generate"}
         </button>
 
         <hr style={{ margin: "14px 0" }} />
@@ -528,8 +528,6 @@ export default function App() {
           Load
         </button>
 
-        {ioStatus ? <div style={{ marginTop: 8, fontSize: 12, color: "#555" }}>{ioStatus}</div> : null}
-
         {showExport ? (
           <div style={{ marginTop: 10 }}>
             <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
@@ -538,12 +536,7 @@ export default function App() {
                 id="copy-btn"
                 onClick={() => {
                   if (navigator.clipboard?.writeText) {
-                    navigator.clipboard.writeText(ioJson).then(
-                      () => setIoStatus("Copied JSON to clipboard"),
-                      () => setIoStatus("Copy failed")
-                    );
-                  } else {
-                    setIoStatus("Clipboard not available");
+                    navigator.clipboard.writeText(ioJson).catch(() => {});
                   }
                   flashButton("copy-btn");
                 }}
@@ -635,23 +628,7 @@ export default function App() {
                       style={{ stroke: "#111", fill: "none", strokeWidth: 1.5, opacity: 0.95 }}
                       dangerouslySetInnerHTML={{ __html: a.inner }}
                     />
-                    <rect
-                      x={0}
-                      y={0}
-                      width={a.vbW}
-                      height={a.vbH}
-                      fill="none"
-                      stroke={isSel ? "#000" : "#111"}
-                      strokeDasharray={isSel ? "" : "4 3"}
-                      strokeWidth={isSel ? 2 : 1}
-                      opacity={isSel ? 0.8 : 0.4}
-                    />
                     <rect x={0} y={0} width={a.vbW} height={a.vbH} fill="transparent" />
-                    <g transform={`scale(${1 / a.scale})`}>
-                      <text x={8} y={-8} fontSize={14} fill="#111" style={{ userSelect: "none" }}>
-                        {a.name}
-                      </text>
-                    </g>
                   </g>
                 );
               })}
