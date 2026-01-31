@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2019",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "types": ["node", "dom"],
+    "baseUrl": "./src",
+    "paths": {
+      "@client/*": ["client/*"]
+    }
+  },
+  "include": ["src/**/*", "scripts/**/*"]
+}
