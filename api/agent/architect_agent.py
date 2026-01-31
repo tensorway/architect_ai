@@ -12,7 +12,12 @@ from agent.svg_catalog import (
     parse_number,
     scale_for_width,
 )
-from agent.workflow_steps.layout_planner_step import LayoutPlannerStep, PlannerDraftOutput
+from agent.workflow_steps.furniture_layout_step import (
+    FurnitureLayoutStep,
+    FurniturePlannerInput,
+)
+from agent.workflow_steps.floor_planner_step import FloorPlannerStep
+from agent.workflow_steps.planner_types import PlannerDraftOutput
 from agent.workflow_steps.workflow import WorkflowStep
 
 
@@ -35,24 +40,42 @@ class ArchitectAgent(WorkflowStep[ArchitectAgentInput, ArchitectAgentOutput]):
     def __init__(self) -> None:
         self._catalog = load_svg_catalog(self.assets_dir)
         asset_names = [asset.name for asset in self._catalog.values()]
-        self._planner = LayoutPlannerStep(asset_names=asset_names)
+        self._floor_planner = FloorPlannerStep(asset_names=asset_names)
+        self._furnisher = FurnitureLayoutStep(asset_names=asset_names)
         super().__init__()
 
     def _run(self, input: ArchitectAgentInput) -> ArchitectAgentOutput:
-        log_checkpoint("Drafting layout options…")
-        draft: PlannerDraftOutput = self._planner.run(input)
+        log_checkpoint("Drafting bare floor plan…")
+        floor_draft: PlannerDraftOutput = self._floor_planner.run(input)
 
-        log_checkpoint("Applying furniture symbols…")
-        resolved_plan, notes = self._resolve_assets(draft.plan)
+        log_checkpoint("Placing furniture symbols…")
+        furniture_draft: PlannerDraftOutput = self._furnisher.run(
+            FurniturePlannerInput(
+                prompt=input.prompt, walls=floor_draft.plan.get("walls") or []
+            )
+        )
+
+        resolved_plan, resolve_notes = self._resolve_assets(
+            {
+                "walls": floor_draft.plan.get("walls") or [],
+                "assets": furniture_draft.plan.get("assets") or [],
+            }
+        )
 
         combined_notes = "; ".join(
-            note for note in [draft.notes.strip(), notes.strip()] if note
+            note
+            for note in [
+                floor_draft.notes.strip(),
+                furniture_draft.notes.strip(),
+                resolve_notes.strip(),
+            ]
+            if note
         )
 
         return ArchitectAgentOutput(
             plan=resolved_plan,
-            view=draft.view,
-            prompt=draft.prompt,
+            view=furniture_draft.view or floor_draft.view,
+            prompt=furniture_draft.prompt or floor_draft.prompt,
             notes=combined_notes,
         )
 

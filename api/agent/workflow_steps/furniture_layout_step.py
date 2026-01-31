@@ -1,29 +1,38 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from typing import Any, Mapping, Sequence
 
 from langchain_core.prompts import ChatPromptTemplate
 
+from agent.workflow_steps.planner_types import PlannerDraftOutput
 from agent.workflow_steps.workflow_llm_step import WorkflowLlmStep
 from config import ModelStrength
 
 
 @dataclass
-class PlannerDraftOutput:
-    plan: Mapping[str, Any]
-    view: Mapping[str, Any] | None = None
-    prompt: str = ""
-    notes: str = ""
+class FurniturePlannerInput:
+    prompt: str
+    walls: Sequence[Mapping[str, Any]]
 
 
-class LayoutPlannerStep(WorkflowLlmStep[Any, PlannerDraftOutput]):
+class FurnitureLayoutStep(WorkflowLlmStep[FurniturePlannerInput, PlannerDraftOutput]):
+    """
+    Places furniture assets onto a provided immutable wall layout.
+    """
+
     output_type = PlannerDraftOutput
     model_strength = ModelStrength.MEDIUM
 
     def __init__(self, *, asset_names: Sequence[str]):
         self.asset_names = tuple(asset_names)
         super().__init__()
+
+    def _build_prompt_inputs(self, input: FurniturePlannerInput) -> Mapping[str, object]:
+        data = super()._build_prompt_inputs(input)
+        data["walls_json"] = json.dumps(input.walls, separators=(",", ":"))
+        return data
 
     def _build_prompt(self) -> ChatPromptTemplate:
         assets_text = "\n".join(f"- {name}" for name in self.asset_names)
@@ -41,17 +50,17 @@ class LayoutPlannerStep(WorkflowLlmStep[Any, PlannerDraftOutput]):
 
         rules_block = (
             "Rules:\\n"
-            "- Coordinates use a 1200x800 SVG viewBox (pixels). Keep the layout centered.\\n"
-            "- Use short ids like w1, a1; ids may be auto-filled if omitted.\\n"
+            "- Use the provided walls exactly; do NOT move, delete, or add walls.\\n"
+            "- Populate ONLY the assets array with furniture; no doors or windows.\\n"
+            "- Coordinates use a 1200x800 SVG viewBox (pixels). Keep placements aligned with the rooms.\\n"
             "- Choose assets ONLY from this library (names verbatim):\\n"
             f"{assets_text}\\n"
             "- Do NOT include SVG XML; it will be filled automatically.\\n"
-            "- Provide a realistic widthM (meters) for each asset; set rotationDeg when needed.\\n"
-            "- Walls should form a plausible floorplan that matches the brief."
+            "- Provide a realistic widthM (meters) for each asset; set rotationDeg when needed."
         )
 
         system_prompt = (
-            "You are an expert residential architect and space planner. "
+            "You are an interior designer placing furniture on an existing floorplan. "
             f"Return ONLY valid JSON (no code fences). Schema: {schema_block}. "
             f"{rules_block}"
         )
@@ -62,7 +71,11 @@ class LayoutPlannerStep(WorkflowLlmStep[Any, PlannerDraftOutput]):
                 (
                     "human",
                     "Design brief: {prompt}\n"
+                    "Existing walls (immutable): {walls_json}\n"
                     "Return JSON now."
                 ),
             ]
         )
+
+
+__all__ = ["FurnitureLayoutStep", "FurniturePlannerInput"]
