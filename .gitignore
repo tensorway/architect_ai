@@ -2,3 +2,17 @@ node_modules
 dist
 .env
 *.log
+.venv
+__pycache__
+*/__pycache__/*
+__pycache__
+*.pdf
+tests/validation_results.jsonl
+*.log
+workflow_report.html
+workflow_log.html
+tests/validation_logs/
+*/node_modules/*
+api/data/raw/hmrc.txt
+todo
+*dump*.txt

@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Workflow Log Report</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            margin: 2rem;
+            background-color: #f6f8fa;
+            color: #1f2328;
+            font-size: 1.05rem;
+            line-height: 1.6;
+        }
+        h1 {
+            margin-bottom: 0.25rem;
+            font-size: 2rem;
+        }
+        .subtitle {
+            margin-top: 0;
+            color: #57606a;
+            font-size: 0.95rem;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+        th, td {
+            border: 1px solid #d0d7de;
+            padding: 0.75rem;
+            vertical-align: top;
+            font-size: 1rem;
+        }
+        tr.hidden {
+            display: none;
+        }
+        .step-name {
+            font-weight: 600;
+            font-size: 1.05rem;
+        }
+        .step-meta {
+            font-size: 0.9rem;
+            color: #57606a;
+            margin-top: 0.25rem;
+        }
+        .step-module {
+            font-size: 0.85rem;
+            color: #6e7781;
+            margin-top: 0.25rem;
+        }
+        button {
+            margin-right: 0.5rem;
+            margin-bottom: 0.25rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 999px;
+            border: 1px solid #0969da;
+            background: #0969da;
+            color: white;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+        button.secondary {
+            background: white;
+            color: #0969da;
+        }
+        button:hover {
+            background: #0757b3;
+        }
+        button.secondary:hover {
+            background: rgba(9, 105, 218, 0.1);
+        }
+        .toggle-step {
+            margin-top: 0;
+        }
+        .step-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            margin: 0.5rem 0;
+        }
+        .step-controls button {
+            margin: 0;
+        }
+        .step-controls button.small {
+            padding: 0.25rem 0.65rem;
+            font-size: 0.8rem;
+            line-height: 1.2;
+            min-width: 8.5rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .payload-section {
+            margin-top: 0.75rem;
+        }
+        .payload-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #1f2328;
+        }
+        .payload-fields {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+        }
+        .payload-field {
+            border: 1px solid #d0d7de;
+            border-radius: 0.5rem;
+            background: #f9fafb;
+            padding: 0.75rem;
+        }
+        .payload-field-row {
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-start;
+        }
+        .payload-key {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #1f2328;
+            margin: 0;
+            padding-top: 0.2rem;
+            min-width: 10rem;
+            flex: 0 0 12rem;
+        }
+        .payload-value {
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 auto;
+        }
+        .payload-field-row .toggle-field {
+            margin: 0;
+        }
+        .toggle-field.small {
+            padding: 0.25rem 0.65rem;
+            font-size: 0.8rem;
+            line-height: 1.2;
+            min-width: 8.5rem;
+        }
+        .field-button-placeholder {
+            display: inline-block;
+            width: 8.5rem;
+            min-width: 8.5rem;
+            height: 2rem;
+        }
+        .field-content {
+            background: #fff;
+            border: 1px solid #d0d7de;
+            border-radius: 0.5rem;
+            max-height: none;
+            overflow: auto;
+            position: relative;
+        }
+        .field-content.collapsed {
+            max-height: 8rem;
+        }
+        .field-content.collapsed::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 3rem;
+            background: linear-gradient(transparent, #fff);
+        }
+        .field-content pre {
+            margin: 0;
+            padding: 0.75rem;
+            font-family: ui-monospace, SFMono-Regular, SFMono, Menlo, Consolas, "Liberation Mono", monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+        }
+        .payload-empty {
+            margin-top: 0.5rem;
+            color: #6e7781;
+            font-style: italic;
+        }
+        .step-row.collapsed .step-extra,
+        .step-row.collapsed .step-details-content {
+            display: none;
+        }
+        .test-step-correct {
+            background-color: #eaf7ed;
+        }
+        .test-step-incorrect {
+            background-color: #fcebea;
+        }
+        .search-bar {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .search-bar input {
+            flex: 1 1 auto;
+            padding: 0.45rem 0.65rem;
+            border-radius: 0.4rem;
+            border: 1px solid #d0d7de;
+            font-size: 0.95rem;
+        }
+        .search-count {
+            color: #57606a;
+            font-size: 0.9rem;
+        }
+        mark.search-mark {
+            background: #ffe8a3;
+            padding: 0 0.1rem;
+            border-radius: 0.15rem;
+        }
+        tr.search-hit {
+            outline: 2px solid #ffd166;
+            outline-offset: -2px;
+        }
+        tr.hidden.search-revealed {
+            display: table-row;
+        }
+        .step-row.collapsed.search-revealed .step-extra,
+        .step-row.collapsed.search-revealed .step-details-content {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>Workflow Log Report · __REPORT_SUMMARY__</h1>
+    <p class="subtitle">Source log: __LOG_PATH__ · Generated at: __GENERATED_AT__</p>
+    <div class="search-bar">
+        <label for="search-input">Search</label>
+        <input id="search-input" type="search" placeholder="Find text across steps" aria-label="Search workflow log">
+        <label for="search-key">in key</label>
+        <input id="search-key" type="search" placeholder="Key name (optional)" aria-label="Search within specific key">
+        <button id="search-run" type="button">Search</button>
+        <button id="search-clear" class="secondary" type="button">Clear</button>
+        <span id="search-count" class="search-count" aria-live="polite"></span>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Step</th>
+                <th>Input &amp; Output</th>
+            </tr>
+        </thead>
+        <tbody>
+            __ROWS__
+        </tbody>
+    </table>
+    <script>
+        function hideBranch(stepId) {
+            document.querySelectorAll("tr[data-parent='" + stepId + "']").forEach(function(row) {
+                if (!row.classList.contains("hidden")) {
+                    row.classList.add("hidden");
+                }
+                hideBranch(row.dataset.stepId);
+            });
+        }
+
+        document.querySelectorAll(".toggle-children").forEach(function(button) {
+            button.addEventListener("click", function() {
+                var stepId = button.getAttribute("data-toggle-children");
+                var rows = Array.from(document.querySelectorAll("tr[data-parent='" + stepId + "']"));
+                if (!rows.length) {
+                    return;
+                }
+                var shouldShow = rows.every(function(row) {
+                    return row.classList.contains("hidden");
+                });
+                rows.forEach(function(row) {
+                    row.classList.toggle("hidden", !shouldShow);
+                    if (!shouldShow) {
+                        hideBranch(row.dataset.stepId);
+                    }
+                });
+                var showText = button.getAttribute("data-show-text");
+                var hideText = button.getAttribute("data-hide-text");
+                button.textContent = shouldShow ? hideText : showText;
+            });
+        });
+
+        document.querySelectorAll(".toggle-step").forEach(function(button) {
+            button.addEventListener("click", function() {
+                var stepId = button.getAttribute("data-step-id");
+                var row = document.querySelector('tr[data-step-id="' + stepId + '"]');
+                if (!row) {
+                    return;
+                }
+                var isCollapsed = row.classList.toggle("collapsed");
+                var collapseText = button.getAttribute("data-collapse-text");
+                var expandText = button.getAttribute("data-expand-text");
+                if (isCollapsed) {
+                    button.textContent = expandText;
+                } else {
+                    button.textContent = collapseText;
+                }
+            });
+        });
+
+        document.querySelectorAll(".toggle-field").forEach(function(button) {
+            button.addEventListener("click", function() {
+                var targetId = button.getAttribute("data-target");
+                var target = document.getElementById(targetId);
+                if (!target) {
+                    return;
+                }
+                var isCollapsed = target.classList.toggle("collapsed");
+                var collapseText = button.getAttribute("data-collapse-text");
+                var expandText = button.getAttribute("data-expand-text");
+                button.textContent = isCollapsed ? expandText : collapseText;
+            });
+        });
+
+        var rows = Array.from(document.querySelectorAll("tbody tr"));
+        var searchInput = document.getElementById("search-input");
+        var searchCount = document.getElementById("search-count");
+        var searchKeyInput = document.getElementById("search-key");
+        var clearButton = document.getElementById("search-clear");
+
+        function escapeRegExp(value) {
+            return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        }
+
+        function clearMarks() {
+            document.querySelectorAll("mark.search-mark").forEach(function(mark) {
+                var parent = mark.parentNode;
+                while (mark.firstChild) {
+                    parent.insertBefore(mark.firstChild, mark);
+                }
+                parent.removeChild(mark);
+                parent.normalize();
+            });
+        }
+
+        function revealAncestors(row) {
+            var parentId = row.dataset.parent;
+            while (parentId) {
+                var parentRow = document.querySelector('tr[data-step-id="' + parentId + '"]');
+                if (!parentRow) {
+                    break;
+                }
+                parentRow.classList.add("search-revealed");
+                parentId = parentRow.dataset.parent || "";
+            }
+        }
+
+        function markMatches(root, term) {
+            var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+            var lowerTerm = term.toLowerCase();
+            var termLength = term.length;
+            var ranges = [];
+
+            while (true) {
+                var node = walker.nextNode();
+                if (!node) {
+                    break;
+                }
+                var text = node.textContent;
+                var lowerText = text.toLowerCase();
+                var startIndex = 0;
+                var index;
+                while ((index = lowerText.indexOf(lowerTerm, startIndex)) !== -1) {
+                    var range = document.createRange();
+                    range.setStart(node, index);
+                    range.setEnd(node, index + termLength);
+                    ranges.push(range);
+                    startIndex = index + termLength;
+                }
+            }
+
+            ranges.forEach(function(range) {
+                var mark = document.createElement("mark");
+                mark.className = "search-mark";
+                range.surroundContents(mark);
+            });
+        }
+
+        function applySearch(term) {
+            clearMarks();
+            rows.forEach(function(row) {
+                row.classList.remove("search-hit", "search-revealed");
+            });
+            searchCount.textContent = "";
+
+            var cleanTerm = term.trim();
+            if (!cleanTerm) {
+                return;
+            }
+
+            var matcher = new RegExp(escapeRegExp(cleanTerm), "i");
+            var keyFilter = (searchKeyInput.value || "").trim().toLowerCase();
+            var matches = 0;
+
+            rows.forEach(function(row) {
+                var rowMatched = false;
+
+                if (keyFilter) {
+                    row.querySelectorAll(".payload-field").forEach(function(field) {
+                        if (rowMatched) {
+                            return;
+                        }
+                        var keyEl = field.querySelector(".payload-key");
+                        var keyText = (keyEl && keyEl.textContent || "").toLowerCase();
+                        if (!keyText.includes(keyFilter)) {
+                            return;
+                        }
+                        field.querySelectorAll(".field-content pre").forEach(function(valueEl) {
+                            if (rowMatched) {
+                                return;
+                            }
+                            if (matcher.test(valueEl.textContent || "")) {
+                                rowMatched = true;
+                                markMatches(valueEl, cleanTerm);
+                            }
+                        });
+                    });
+                } else {
+                    row.querySelectorAll(".step-name, .step-module, .field-content pre").forEach(function(el) {
+                        if (rowMatched) {
+                            return;
+                        }
+                        if (matcher.test(el.textContent || "")) {
+                            rowMatched = true;
+                            markMatches(el, cleanTerm);
+                        }
+                    });
+                }
+
+                if (rowMatched) {
+                    matches += 1;
+                    row.classList.add("search-hit", "search-revealed");
+                    revealAncestors(row);
+                }
+            });
+
+            if (matches) {
+                searchCount.textContent = matches + (matches === 1 ? " match" : " matches");
+                var firstHit = document.querySelector("tr.search-hit");
+                if (firstHit) {
+                    firstHit.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
+            } else {
+                searchCount.textContent = "No matches";
+            }
+        }
+
+        document.getElementById("search-run").addEventListener("click", function() {
+            applySearch(searchInput.value);
+        });
+
+        searchInput.addEventListener("keydown", function(event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                applySearch(searchInput.value);
+            }
+        });
+
+        clearButton.addEventListener("click", function() {
+            searchInput.value = "";
+            applySearch("");
+            searchInput.focus();
+        });
+    </script>
+</body>
+</html>
