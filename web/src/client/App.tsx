@@ -46,7 +46,16 @@ export default function App() {
   }, []);
 
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
-  const [plan, setPlan] = useState<Plan>(() => generatePlanFromText(DEFAULT_PROMPT));
+  const [plan, setPlan] = useState<Plan>(() => ({
+    walls: [
+      { id: "w1", a: { x: 100, y: 100 }, b: { x: 700, y: 100 } },
+      { id: "w2", a: { x: 700, y: 100 }, b: { x: 700, y: 500 } },
+      { id: "w3", a: { x: 700, y: 500 }, b: { x: 100, y: 500 } },
+      { id: "w4", a: { x: 100, y: 500 }, b: { x: 100, y: 100 } },
+      { id: "w5", a: { x: 400, y: 100 }, b: { x: 400, y: 500 } }
+    ],
+    assets: [],
+  }));
   const [selection, setSelection] = useState<Selection>({ type: "wall", id: "w1" });
   const [view, setView] = useState<ViewState>({ x: 0, y: 0, scale: 1 });
   const [ioStatus, setIoStatus] = useState("");
@@ -98,10 +107,19 @@ export default function App() {
     }));
   }
 
-  function handleGenerate() {
-    setPlan(generatePlanFromText(prompt));
-    setSelection({ type: "wall", id: "w1" });
+  async function handleGenerate() {
+    setIoStatus("Generating…");
     flashButton("generate-btn");
+    try {
+      const next = await generatePlanFromText(prompt);
+      setPlan(next);
+      const firstWall = next.walls?.[0];
+      setSelection(firstWall ? { type: "wall", id: firstWall.id } : null);
+      setIoStatus("Plan updated");
+    } catch (err) {
+      console.error("[architect] generate failed", err);
+      setIoStatus("Generation failed");
+    }
   }
 
   function onSave() {
