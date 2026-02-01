@@ -11,7 +11,8 @@ from config import ModelStrength
 
 class FloorPlannerStep(WorkflowLlmStep[Any, PlannerDraftOutput]):
     """
-    Generates the architectural shell only (walls). No windows, doors, or furniture.
+    Generates the architectural shell only (walls) plus semantic room labels.
+    No windows, doors, or furniture.
     """
 
     output_type = PlannerDraftOutput
@@ -27,6 +28,7 @@ class FloorPlannerStep(WorkflowLlmStep[Any, PlannerDraftOutput]):
             "{{\\n"
             '  "plan": {{\\n'
             '    "walls": [ {{ "id": string, "a": {{"x": number, "y": number}}, "b": {{"x": number, "y": number}} }} ],\\n'
+            '    "rooms": [ {{ "id": string, "wallIds": [string], "label": string, "description": string }} ],\\n'
             '    "assets": []\\n'
             "  }},\\n"
             '  "view"?: {{ "x": number, "y": number, "scale": number }},\\n'
@@ -38,8 +40,10 @@ class FloorPlannerStep(WorkflowLlmStep[Any, PlannerDraftOutput]):
         rules_block = (
             "Rules:\\n"
             "- Coordinates use a 1200x800 SVG viewBox (pixels). Keep the layout centered.\\n"
-            "- Use short ids like w1; ids may be auto-filled if omitted.\\n"
+            "- Every wall must include a short id like w1 so rooms can reference it.\\n"
             "- Focus ONLY on the floorplan shell: straight walls that form a plausible layout matching the brief.\\n"
+            "- Define rooms by grouping the walls that enclose each space; list those wall ids in wallIds. Shared walls may appear in multiple rooms.\\n"
+            "- Give each room a clear label (kitchen, bathroom, primary bedroom, entry, corridor, open living/dining, etc.) and a one-sentence description that reflects the user's brief (size, adjacency, or key feature).\\n"
             "- assets must be an empty array [].\\n"
             "- Do NOT include SVG XML; it will be filled automatically."
         )
