@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
 
 from agent.logging.checkpoints import log_checkpoint
 from agent.svg_catalog import (
@@ -10,14 +9,21 @@ from agent.svg_catalog import (
     load_svg_catalog,
     normalize_name,
     parse_number,
-    scale_for_width,
 )
 from agent.workflow_steps.furniture_layout_step import (
     FurnitureLayoutStep,
     FurniturePlannerInput,
 )
 from agent.workflow_steps.floor_planner_step import FloorPlannerStep
-from agent.workflow_steps.planner_types import PlannerDraftOutput
+from agent.workflow_steps.planner_types import (
+    Asset,
+    RequestedItem,
+    PlannerDraftOutput,
+    Room,
+    RoomRequirement,
+    Viewport,
+    Wall,
+)
 from agent.workflow_steps.room_requirements_step import (
     RoomRequirementsInput,
     RoomRequirementsOutput,
@@ -33,8 +39,11 @@ class ArchitectAgentInput:
 
 @dataclass
 class ArchitectAgentOutput:
-    plan: Mapping[str, Any]
-    view: Mapping[str, Any] | None = None
+    walls: list[Wall]
+    rooms: list[Room]
+    assets: list[Asset]
+    roomRequirements: list[RoomRequirement]
+    view: Viewport | None = None
     prompt: str = ""
     notes: str = ""
 
@@ -52,21 +61,19 @@ class ArchitectAgent(WorkflowStep[ArchitectAgentInput, ArchitectAgentOutput]):
 
     def _run(self, input: ArchitectAgentInput) -> ArchitectAgentOutput:
         floor_draft = self._draft_floor(input)
-        rooms = floor_draft.plan.get("rooms") or []
+        walls = floor_draft.walls or []
+        rooms = floor_draft.rooms or []
 
         room_requirements = self._extract_room_requirements(input.prompt, rooms)
         assets, furn_view, furn_prompt, furn_notes = self._layout_furniture(
             input.prompt, floor_draft, rooms, room_requirements
         )
 
-        resolved_plan, resolve_notes = self._resolve_assets(
-            {
-                "walls": floor_draft.plan.get("walls") or [],
-                "rooms": rooms,
-                "assets": assets,
-                "roomRequirements": [req.__dict__ for req in room_requirements],
-            }
-        )
+        room_requirement_descriptions = [
+            req.description for req in room_requirements if req.description
+        ]
+
+        resolved_assets, resolve_notes = self._resolve_assets(assets)
 
         combined_notes = "; ".join(
             note
@@ -82,7 +89,10 @@ class ArchitectAgent(WorkflowStep[ArchitectAgentInput, ArchitectAgentOutput]):
         )
 
         return ArchitectAgentOutput(
-            plan=resolved_plan,
+            walls=walls,
+            rooms=rooms,
+            assets=resolved_assets,
+            roomRequirements=room_requirement_descriptions,
             view=furn_view or floor_draft.view,
             prompt=furn_prompt or floor_draft.prompt,
             notes=combined_notes,
@@ -93,7 +103,7 @@ class ArchitectAgent(WorkflowStep[ArchitectAgentInput, ArchitectAgentOutput]):
         return self._floor_planner.run(input)
 
     def _extract_room_requirements(
-        self, prompt: str, rooms: list[Mapping[str, Any]]
+        self, prompt: str, rooms: list[Room]
     ) -> list[RoomRequirementsOutput]:
         if not rooms:
             return []
@@ -118,9 +128,9 @@ class ArchitectAgent(WorkflowStep[ArchitectAgentInput, ArchitectAgentOutput]):
         self,
         user_prompt: str,
         floor_draft: PlannerDraftOutput,
-        rooms: list[Mapping[str, Any]],
+        rooms: list[Room],
         room_requirements: list[RoomRequirementsOutput],
-    ) -> tuple[list[Mapping[str, Any]], Mapping[str, Any] | None, str, str]:
+    ) -> tuple[list[Asset], Viewport | None, str, str]:
         if not rooms:
             return [], None, "", ""
         if not room_requirements:
@@ -129,15 +139,15 @@ class ArchitectAgent(WorkflowStep[ArchitectAgentInput, ArchitectAgentOutput]):
 
     def _layout_single_pass(
         self, user_prompt: str, floor_draft: PlannerDraftOutput
-    ) -> tuple[list[Mapping[str, Any]], Mapping[str, Any] | None, str, str]:
+    ) -> tuple[list[Asset], Viewport | None, str, str]:
         log_checkpoint("Placing furniture (single pass)…")
         draft = self._furnisher.run(
             FurniturePlannerInput(
-                prompt=user_prompt, walls=floor_draft.plan.get("walls") or []
+                prompt=user_prompt, walls=floor_draft.walls or []
             )
         )
         return (
-            draft.plan.get("assets") or [],
+            draft.assets or [],
             draft.view,
             draft.prompt or "",
             draft.notes.strip(),
@@ -147,14 +157,14 @@ class ArchitectAgent(WorkflowStep[ArchitectAgentInput, ArchitectAgentOutput]):
         self,
         user_prompt: str,
         floor_draft: PlannerDraftOutput,
-        rooms: list[Mapping[str, Any]],
+        rooms: list[Room],
         room_requirements: list[RoomRequirementsOutput],
-    ) -> tuple[list[Mapping[str, Any]], Mapping[str, Any] | None, str, str]:
+    ) -> tuple[list[Asset], Viewport | None, str, str]:
         log_checkpoint("Placing furniture room-by-room…")
-        wall_lookup = self._build_wall_lookup(floor_draft.plan.get("walls") or [])
+        wall_lookup = self._build_wall_lookup(floor_draft.walls or [])
         req_by_room = {req.room_id: req for req in room_requirements}
 
-        assets: list[Mapping[str, Any]] = []
+        assets: list[Asset] = []
         notes: list[str] = []
         prompts: list[str] = []
         view = None
@@ -169,7 +179,7 @@ class ArchitectAgent(WorkflowStep[ArchitectAgentInput, ArchitectAgentOutput]):
             draft = self._furnisher.run(
                 FurniturePlannerInput(prompt=room_prompt, walls=walls)
             )
-            assets.extend(draft.plan.get("assets") or [])
+            assets.extend(draft.assets or [])
             if draft.notes:
                 notes.append(draft.notes.strip())
             if draft.prompt:
@@ -179,27 +189,25 @@ class ArchitectAgent(WorkflowStep[ArchitectAgentInput, ArchitectAgentOutput]):
 
         return assets, view, "; ".join(prompts), "; ".join(notes)
 
-    def _build_wall_lookup(
-        self, walls: list[Mapping[str, Any]]
-    ) -> dict[str, Mapping[str, Any]]:
-        return {
-            str(w.get("id")): w for w in walls if isinstance(w, Mapping) and w.get("id")
-        }
+    def _build_wall_lookup(self, walls: list[Wall] | None) -> dict[str, Wall]:
+        if not walls:
+            return {}
+        return {w["id"]: w for w in walls if w.get("id")}
 
     def _walls_for_room(
         self,
-        room: Mapping[str, Any],
-        wall_lookup: Mapping[str, Mapping[str, Any]],
+        room: Room,
+        wall_lookup: dict[str, Wall],
         floor_draft: PlannerDraftOutput,
-    ) -> list[Mapping[str, Any]]:
+    ) -> list[Wall]:
         wall_ids = room.get("wallIds") or []
         room_walls = [wall_lookup[wid] for wid in wall_ids if wid in wall_lookup]
-        return room_walls or list(floor_draft.plan.get("walls") or [])
+        return room_walls or list(floor_draft.walls or [])
 
     def _build_room_prompt(
         self,
         user_prompt: str,
-        room: Mapping[str, Any],
+        room: Room,
         req: RoomRequirementsOutput | None,
     ) -> str:
         parts = [user_prompt]
@@ -217,7 +225,7 @@ class ArchitectAgent(WorkflowStep[ArchitectAgentInput, ArchitectAgentOutput]):
 
         return "\n".join(parts)
 
-    def _summarize(self, items: list[Mapping[str, Any]]) -> str:
+    def _summarize(self, items: list[RequestedItem]) -> str:
         if not items:
             return "none specified"
         return "; ".join(
@@ -225,18 +233,11 @@ class ArchitectAgent(WorkflowStep[ArchitectAgentInput, ArchitectAgentOutput]):
             for item in items
         )
 
-    def _resolve_assets(
-        self, plan_payload: Mapping[str, Any]
-    ) -> tuple[Mapping[str, Any], str]:
-        walls = plan_payload.get("walls") or []
-        raw_assets = plan_payload.get("assets") or []
-
-        resolved_assets = []
+    def _resolve_assets(self, raw_assets: list[Asset]) -> tuple[list[Asset], str]:
+        resolved_assets: list[Asset] = []
         missing_assets: list[str] = []
 
         for idx, raw in enumerate(raw_assets):
-            if not isinstance(raw, Mapping):
-                continue
             name = str(raw.get("name") or "").strip()
             if not name:
                 continue
@@ -254,33 +255,24 @@ class ArchitectAgent(WorkflowStep[ArchitectAgentInput, ArchitectAgentOutput]):
             else ""
         )
 
-        plan = {**plan_payload, "walls": walls, "assets": resolved_assets}
-        return plan, notes
+        return resolved_assets, notes
 
     def _materialize_asset(
-        self, asset_def: SvgAssetDefinition, raw: Mapping[str, Any], idx: int
-    ) -> Mapping[str, Any]:
+        self, asset_def: SvgAssetDefinition, raw: Asset, idx: int
+    ) -> Asset:
         asset_id = str(raw.get("id") or f"a{idx + 1}")
         x = parse_number(raw.get("x"), 0.0) or 0.0
         y = parse_number(raw.get("y"), 0.0) or 0.0
-        rotation = parse_number(raw.get("rotationDeg"), 0.0) or 0.0
-
-        width_m = parse_number(raw.get("widthM"))
-        scale = parse_number(raw.get("scale"))
-        if scale is None or scale <= 0:
-            target_width_m = width_m if width_m and width_m > 0 else 1.0
-            scale = scale_for_width(asset_def.vbW, target_width_m)
-
         return {
             "id": asset_id,
             "name": asset_def.name,
             "inner": asset_def.inner,
             "vbW": asset_def.vbW,
             "vbH": asset_def.vbH,
+            "scale": parse_number(raw.get("scale"), 1.0) or 1.0,
+            "rotationDeg": parse_number(raw.get("rotationDeg"), 0.0) or 0.0,
             "x": x,
             "y": y,
-            "scale": scale,
-            "rotationDeg": rotation,
         }
 
 

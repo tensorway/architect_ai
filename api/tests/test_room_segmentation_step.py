@@ -42,7 +42,7 @@ class RoomSegmentationStepTest(unittest.TestCase):
         outputs = RoomSegmentationStep().run(RoomSegmentationInput(walls=walls))
 
         self.assertEqual(len(outputs), 1)
-        rooms = outputs[0].plan.get("rooms") or []
+        rooms = outputs[0].rooms or []
 
         self.assertEqual(len(rooms), 1)
         room = rooms[0]
@@ -64,7 +64,7 @@ class RoomSegmentationStepTest(unittest.TestCase):
 
         self.assertEqual(len(outputs), 2)
 
-        areas = sorted(room["area"] for out in outputs for room in out.plan.get("rooms") or [])
+        areas = sorted(room["area"] for out in outputs for room in out.rooms or [])
         self.assertAlmostEqual(areas[0], 40.0, places=5)
         self.assertAlmostEqual(areas[1], 40.0, places=5)
 
@@ -104,7 +104,7 @@ class RoomSegmentationStepTest(unittest.TestCase):
         outputs = RoomSegmentationStep().run(RoomSegmentationInput(walls=walls))
 
         self.assertEqual(len(outputs), 2)
-        areas = sorted(room["area"] for out in outputs for room in out.plan.get("rooms") or [])
+        areas = sorted(room["area"] for out in outputs for room in out.rooms or [])
         self.assertAlmostEqual(areas[0], 40.0, places=5)
         self.assertAlmostEqual(areas[1], 40.0, places=5)
 
@@ -121,7 +121,7 @@ class RoomSegmentationStepTest(unittest.TestCase):
 
         # sliver (0.8 m^2) removed; main room remains
         self.assertEqual(len(outputs), 1)
-        rooms = outputs[0].plan.get("rooms") or []
+        rooms = outputs[0].rooms or []
         self.assertEqual(len(rooms), 1)
         self.assertAlmostEqual(rooms[0]["area"], 79.2, places=4)
 

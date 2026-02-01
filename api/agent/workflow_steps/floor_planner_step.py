@@ -26,11 +26,10 @@ class FloorPlannerStep(WorkflowLlmStep[Any, PlannerDraftOutput]):
     def _build_prompt(self) -> ChatPromptTemplate:
         schema_block = (
             "{{\\n"
-            '  "plan": {{\\n'
-            '    "walls": [ {{ "id": string, "a": {{"x": number, "y": number}}, "b": {{"x": number, "y": number}} }} ],\\n'
-            '    "rooms": [ {{ "id": string, "wallIds": [string], "label": string, "description": string }} ],\\n'
-            '    "assets": []\\n'
-            "  }},\\n"
+            '  "walls": [ {{ "id": string, "a": {{"x": number, "y": number}}, "b": {{"x": number, "y": number}} }} ],\\n'
+            '  "rooms": [ {{ "id": string, "wallIds": [string], "label": string, "description": string }} ],\\n'
+            '  "assets": [],\\n'
+            '  "roomRequirements": [],\\n'
             '  "view"?: {{ "x": number, "y": number, "scale": number }},\\n'
             '  "prompt": string,\\n'
             '  "notes": string\\n'
@@ -45,6 +44,7 @@ class FloorPlannerStep(WorkflowLlmStep[Any, PlannerDraftOutput]):
             "- Define rooms by grouping the walls that enclose each space; list those wall ids in wallIds. Shared walls may appear in multiple rooms.\\n"
             "- Give each room a clear label (kitchen, bathroom, primary bedroom, entry, corridor, open living/dining, etc.) and a one-sentence description that reflects the user's brief (size, adjacency, or key feature).\\n"
             "- assets must be an empty array [].\\n"
+            "- roomRequirements must be an empty array [].\\n"
             "- Do NOT include SVG XML; it will be filled automatically."
         )
 

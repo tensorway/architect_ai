@@ -35,8 +35,17 @@ class RoomSegmentationStep(
                 "vertices": [{"x": x, "y": y} for (x, y) in _dedupe_ring(points)],
                 "area": abs(_polygon_area(points)),
             }
-            plan = {"walls": list(input.walls), "rooms": [room_payload], "assets": []}
-            outputs.append(PlannerDraftOutput(plan=plan, view=None, prompt="", notes=""))
+            outputs.append(
+                PlannerDraftOutput(
+                    walls=list(input.walls),
+                    rooms=[room_payload],
+                    assets=[],
+                    roomRequirements=[],
+                    view=None,
+                    prompt="",
+                    notes="",
+                )
+            )
 
         return outputs
 

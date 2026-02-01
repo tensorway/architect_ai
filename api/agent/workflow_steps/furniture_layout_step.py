@@ -38,10 +38,10 @@ class FurnitureLayoutStep(WorkflowLlmStep[FurniturePlannerInput, PlannerDraftOut
         assets_text = "\n".join(f"- {name}" for name in self.asset_names)
         schema_block = (
             "{{\\n"
-            '  "plan": {{\\n'
-            '    "walls": [ {{ "id": string, "a": {{"x": number, "y": number}}, "b": {{"x": number, "y": number}} }} ],\\n'
-            '    "assets": [ {{ "id"?: string, "name": string, "x": number, "y": number, "rotationDeg"?: number, "widthM"?: number, "scale"?: number }} ]\\n'
-            "  }},\\n"
+            '  "walls": [ {{ "id": string, "a": {{"x": number, "y": number}}, "b": {{"x": number, "y": number}} }} ],\\n'
+            '  "rooms": [],\\n'
+            '  "assets": [ {{ "id"?: string, "name": string, "x": number, "y": number }} ],\\n'
+            '  "roomRequirements": [],\\n'
             '  "view"?: {{ "x": number, "y": number, "scale": number }},\\n'
             '  "prompt": string,\\n'
             '  "notes": string\\n'
@@ -56,7 +56,7 @@ class FurnitureLayoutStep(WorkflowLlmStep[FurniturePlannerInput, PlannerDraftOut
             "- Choose assets ONLY from this library (names verbatim):\\n"
             f"{assets_text}\\n"
             "- Do NOT include SVG XML; it will be filled automatically.\\n"
-            "- Provide a realistic widthM (meters) for each asset; set rotationDeg when needed."
+            "- roomRequirements must be an empty array []."
         )
 
         system_prompt = (

@@ -19,8 +19,14 @@ from config import load_settings
 
 
 def _build_response_payload(result, checkpoints: List[str]) -> Dict[str, Any]:
+    plan = {
+        "walls": result.walls,
+        "rooms": result.rooms,
+        "assets": result.assets,
+        "roomRequirements": result.roomRequirements,
+    }
     return {
-        "plan": result.plan,
+        "plan": plan,
         "view": result.view,
         "prompt": result.prompt,
         "notes": result.notes,
