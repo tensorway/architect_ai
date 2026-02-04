@@ -96,6 +96,192 @@ def _build_nodes(records: Iterable[StepRecord]) -> list[StepNode]:
 FIELD_COLLAPSE_THRESHOLD = 300
 
 
+def _extract_planner_payload(value: Any) -> dict[str, Any] | None:
+    """Return a normalized PlannerDraftOutput-like payload or None."""
+
+    def _as_plan(obj: Any) -> dict[str, Any] | None:
+        if not isinstance(obj, dict):
+            return None
+        if "plan" in obj and isinstance(obj["plan"], dict):
+            return obj["plan"]  # Some steps may wrap the draft inside {plan: ...}
+        return obj
+
+    plan = _as_plan(value)
+    if not plan:
+        return None
+
+    walls = plan.get("walls")
+    assets = plan.get("assets", [])
+    rooms = plan.get("rooms", [])
+
+    if not isinstance(walls, list):
+        return None
+    if not isinstance(assets, list):
+        assets = []
+    if not isinstance(rooms, list):
+        rooms = []
+    if not walls and not assets and not rooms:
+        return None
+
+    return {
+        "walls": walls,
+        "assets": assets,
+        "rooms": rooms,
+        "roomRequirements": plan.get("roomRequirements", []),
+        "view": plan.get("view"),
+        "prompt": plan.get("prompt", ""),
+    }
+
+
+def _plan_bounds(plan: dict[str, Any]) -> tuple[float, float, float, float]:
+    min_x = min_y = float("inf")
+    max_x = max_y = float("-inf")
+
+    def _touch_point(pt: Any) -> None:
+        nonlocal min_x, min_y, max_x, max_y
+        if not isinstance(pt, dict):
+            return
+        x, y = pt.get("x"), pt.get("y")
+        if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+            return
+        min_x = min(min_x, x)
+        min_y = min(min_y, y)
+        max_x = max(max_x, x)
+        max_y = max(max_y, y)
+
+    for wall in plan.get("walls", []):
+        if not isinstance(wall, dict):
+            continue
+        _touch_point(wall.get("a"))
+        _touch_point(wall.get("b"))
+
+    for room in plan.get("rooms", []):
+        verts = room.get("vertices") if isinstance(room, dict) else None
+        if isinstance(verts, list):
+            for pt in verts:
+                _touch_point(pt)
+
+    for asset in plan.get("assets", []):
+        if not isinstance(asset, dict):
+            continue
+        _touch_point(asset)
+
+    if min_x == float("inf"):
+        return (0.0, 0.0, 400.0, 280.0)
+
+    width = max(1.0, max_x - min_x)
+    height = max(1.0, max_y - min_y)
+    pad = max(width, height) * 0.1 + 10
+    return (min_x - pad, min_y - pad, width + pad * 2, height + pad * 2)
+
+
+def _render_planner_snapshot(payload: Any) -> str:
+    plan = _extract_planner_payload(payload)
+    if not plan:
+        return ""
+
+    view_min_x, view_min_y, view_w, view_h = _plan_bounds(plan)
+
+    room_polys: list[str] = []
+    for room in plan.get("rooms", []):
+        verts = room.get("vertices") if isinstance(room, dict) else None
+        if not isinstance(verts, list) or len(verts) < 3:
+            continue
+        coords: list[tuple[float, float]] = []
+        for v in verts:
+            if not isinstance(v, dict):
+                continue
+            x, y = v.get("x"), v.get("y")
+            if isinstance(x, (int, float)) and isinstance(y, (int, float)):
+                coords.append((float(x), float(y)))
+        if len(coords) < 3:
+            continue
+        pts = [f"{x},{y}" for x, y in coords]
+        cx = sum(x for x, _ in coords) / len(coords)
+        cy = sum(y for _, y in coords) / len(coords)
+        label = escape(str(room.get("label", room.get("id", ""))))
+        room_polys.append(
+            """
+            <g class='room'>
+              <polygon points='{points}' />
+              <text x='{cx}' y='{cy}'>{label}</text>
+            </g>
+            """.strip().format(points=" ".join(pts), label=label, cx=cx, cy=cy)
+        )
+
+    wall_lines: list[str] = []
+    for wall in plan.get("walls", []):
+        if not isinstance(wall, dict):
+            continue
+        a, b = wall.get("a"), wall.get("b")
+        if not isinstance(a, dict) or not isinstance(b, dict):
+            continue
+        wall_lines.append(
+            "<line x1='{x1}' y1='{y1}' x2='{x2}' y2='{y2}' />".format(
+                x1=a.get("x", 0),
+                y1=a.get("y", 0),
+                x2=b.get("x", 0),
+                y2=b.get("y", 0),
+            )
+        )
+
+    asset_marks: list[str] = []
+    for asset in plan.get("assets", []):
+        if not isinstance(asset, dict):
+            continue
+        x, y = asset.get("x"), asset.get("y")
+        if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+            continue
+        name = escape(str(asset.get("name", "asset")))
+        scale = asset.get("scale", 1.0)
+        rotation = asset.get("rotationDeg", 0.0)
+        inner = asset.get("inner")
+
+        transform = f"translate({x} {y}) rotate({rotation}) scale({scale})"
+        if isinstance(inner, str) and inner.strip():
+            asset_marks.append(
+                "<g class='asset' transform='{t}'>"
+                "{inner}"
+                "</g>".format(t=transform, inner=inner)
+            )
+        else:
+            vbw = asset.get("vbW")
+            vbh = asset.get("vbH")
+            width = float(vbw) if isinstance(vbw, (int, float)) else 24.0
+            height = float(vbh) if isinstance(vbh, (int, float)) else 24.0
+            x0 = -width / 2
+            y0 = -height / 2
+            asset_marks.append(
+                "<g class='asset' transform='{t}'>"
+                "<rect class='asset-fallback' x='{x}' y='{y}' width='{w}' height='{h}' rx='3' />"
+                "</g>".format(t=transform, x=x0, y=y0, w=width, h=height)
+            )
+
+    svg = (
+        "<div class='plan-snapshot'>"
+        "<div class='plan-snapshot-title'>Planner snapshot</div>"
+        "<div class='plan-snapshot-frame'>"
+        "<svg viewBox='{vx} {vy} {vw} {vh}' role='img' aria-label='Planner snapshot'>"
+        "<rect class='bg' x='{vx}' y='{vy}' width='{vw}' height='{vh}' />"
+        "<g class='rooms'>{rooms}</g>"
+        "<g class='walls'>{walls}</g>"
+        "<g class='assets'>{assets}</g>"
+        "</svg>"
+        "</div>"
+        "</div>"
+    ).format(
+        vx=view_min_x,
+        vy=view_min_y,
+        vw=view_w,
+        vh=view_h,
+        rooms="".join(room_polys),
+        walls="".join(wall_lines),
+        assets="".join(asset_marks),
+    )
+
+    return svg
+
+
 def _serialize_payload(payload: Any, *, indent: int = 2) -> str:
     return json.dumps(payload, indent=indent, ensure_ascii=False)
 
@@ -180,6 +366,18 @@ def _render_payload_fields(section_id: str, payload: Any, label: str) -> str:
 
 def _render_payload_section(step_id: str, label: str, payload: Any) -> str:
     section_id = f"{step_id}-{label}"
+    snapshot = _render_planner_snapshot(payload)
+    if snapshot:
+        return (
+            '<div class="payload-section payload-with-snapshot">'
+            f'<div class="payload-title">{label.title()}</div>'
+            '<div class="payload-layout">'
+            f'<div class="payload-col fields-col">{_render_payload_fields(section_id, payload, label)}</div>'
+            f'<div class="payload-col snapshot-col">{snapshot}</div>'
+            "</div>"
+            "</div>"
+        )
+
     return (
         '<div class="payload-section">'
         f'<div class="payload-title">{label.title()}</div>'

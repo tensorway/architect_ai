@@ -95,6 +95,30 @@
         .payload-section {
             margin-top: 0.75rem;
         }
+        .payload-with-snapshot .payload-layout {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+        }
+        .payload-col {
+            flex: 1 1 0;
+            min-width: 0;
+        }
+        .snapshot-col {
+            flex: 0 1 45%;
+            min-width: 260px;
+        }
+        .fields-col {
+            flex: 1 1 55%;
+        }
+        @media (max-width: 900px) {
+            .payload-with-snapshot .payload-layout {
+                flex-direction: column;
+            }
+            .snapshot-col, .fields-col {
+                flex: 1 1 auto;
+            }
+        }
         .payload-title {
             font-weight: 600;
             font-size: 0.95rem;
@@ -187,6 +211,46 @@
         }
         .test-step-incorrect {
             background-color: #fcebea;
+        }
+        .plan-snapshot {
+            margin-top: 0.5rem;
+            border: 1px solid #d0d7de;
+            border-radius: 0.5rem;
+            background: #fff;
+            padding: 0.75rem;
+        }
+        .plan-snapshot-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 0.35rem;
+        }
+        .plan-snapshot-frame {
+            border: 1px solid #e6ebf1;
+            border-radius: 0.35rem;
+            background: #f8fafc;
+            padding: 0.35rem;
+            overflow: hidden;
+        }
+        .plan-snapshot svg {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        .plan-snapshot .bg { fill: #fdfefe; stroke: #e6ebf1; stroke-width: 1; }
+        .plan-snapshot .rooms polygon { fill: #dbeafe; stroke: #1d4ed8; stroke-width: 1.25; fill-opacity: 0.35; }
+        .plan-snapshot .rooms text { fill: #1f2937; font-size: 11px; }
+        .plan-snapshot .walls line { stroke: #111827; stroke-width: 2.5; stroke-linecap: square; }
+        .plan-snapshot .assets rect { fill: #f59e0b; stroke: #111827; stroke-width: 1.6; }
+        .plan-snapshot .assets rect.asset-fallback { fill: #fbbf24; stroke: #111827; }
+        .plan-snapshot .assets g, .plan-snapshot .assets g * {
+            stroke: #111827 !important;
+            stroke-width: 1.6 !important;
+        }
+        .plan-snapshot-caption {
+            margin-top: 0.35rem;
+            font-size: 0.9rem;
+            color: #4b5563;
+            white-space: pre-wrap;
         }
         .search-bar {
             display: flex;
